@@ -2,7 +2,11 @@ import { Layout, Row, Col, Button, Spin, List, Checkbox, Input, Table } from "an
 import { WalletSelector } from "@aptos-labs/wallet-adapter-ant-design";
 import "@aptos-labs/wallet-adapter-ant-design/dist/index.css";
 import { Aptos, AptosConfig, Network } from "@aptos-labs/ts-sdk";
-import { useWallet } from "@aptos-labs/wallet-adapter-react";
+import {
+  useWallet,
+  InputTransactionData,
+} from "@aptos-labs/wallet-adapter-react";
+
 import { useState, useEffect } from "react";
 
 const aptosConfig = new AptosConfig({ network: Network.TESTNET });
@@ -10,7 +14,7 @@ const aptos = new Aptos(aptosConfig);
 
 
 function App() {
-  const { account } = useWallet();  
+  const { account, signAndSubmitTransaction } = useWallet();
 
   useEffect(() => {
     fetchRequest();
@@ -24,12 +28,18 @@ function App() {
   const [owner, setOwner] = useState("");
   const [recipient, setRecipient] = useState("");
   const [value, setValue] = useState("");
+  //新規作成したリクエストの情報を格納する
+  const [newMinimumContribution, setNewMinimumContribution] = useState("");
+  const [newDescription, setNewDescription] = useState("");
+  const [newValue, setNewValue] = useState("");
+  const [newRecipient, setNewRecipient] = useState("");
+  const moduleAddress = "0x709acdb9471938ee0f0a7d04cde2b3add05c91cc7ace10348e8dad349ce91169";
 
   //アカウントが寄付のリクエストを持つかどうかを取得し、フラグを変更する
   const fetchRequest = async () => {
     if (!account) return [];
     // change this to be your module account address
-    const moduleAddress = "0x709acdb9471938ee0f0a7d04cde2b3add05c91cc7ace10348e8dad349ce91169";
+    
     try {
       const RequestResource = await aptos.getAccountResource(
         {
@@ -100,6 +110,32 @@ function App() {
     },
   ];
 
+
+  //まだ接続したウォレットがリクエストを行っていない場合に、新規にリクエストを生成する
+  const createRequest = async () => {
+    if (!account) return;
+  
+    const transaction:InputTransactionData = {
+      data: {
+        function: `${moduleAddress}::message_v07::create_request`,
+        functionArguments: [newMinimumContribution, newDescription, newValue, newRecipient],
+      }
+    };
+  
+    try {
+      const response = await signAndSubmitTransaction(transaction);
+      // wait for transaction
+      await aptos.waitForTransaction({transactionHash:response.hash});
+      console.log('Transaction submitted:', response);
+      //登録したリクエストの情報を取得
+      fetchRequest()
+    } catch (error) {
+      console.error('Error submitting transaction:', error);
+    }
+  };
+  
+
+
   return (
     <>
       <Layout>
@@ -112,15 +148,48 @@ function App() {
           </Col>
         </Row>
       </Layout>
-      {accountHasRequest && (
+      {accountHasRequest ? (
       <Row gutter={[0, 32]} style={{ marginTop: "2rem" }}>
-        <Col span={16} offset={4}>
+        <Col span={16} offset={0}>
             <div style={{ background: "#f0f2f5", padding: "20px", borderRadius: "8px", boxShadow: "0 2px 8px rgba(0,0,0,0.1)" }}>
                 <h2>You have a request:</h2>
                 <Table dataSource={dataSource} columns={columns} pagination={false} />
             </div>
         </Col>
       </Row>
+    ):(
+      <Row justify="center" style={{ marginTop: "2rem" }}>
+      <Col span={12}>
+        <div style={{ padding: "20px", background: "#f0f2f5", boxShadow: "0 2px 8px rgba(0,0,0,0.1)", borderRadius: "8px" }}>
+          <h2>Create a new request</h2>
+          <Input
+            placeholder="Minimum Contribution"
+            value={newMinimumContribution}
+            onChange={(e) => setNewMinimumContribution(e.target.value)}
+            style={{ marginBottom: "10px" }}
+          />
+          <Input
+            placeholder="Description"
+            value={newDescription}
+            onChange={(e) => setNewDescription(e.target.value)}
+            style={{ marginBottom: "10px" }}
+          />
+          <Input
+            placeholder="Desired amount"
+            value={newValue}
+            onChange={(e) => setNewValue(e.target.value)}
+            style={{ marginBottom: "10px" }}
+          />
+          <Input
+            placeholder="Recipient Address"
+            value={newRecipient}
+            onChange={(e) => setNewRecipient(e.target.value)}
+            style={{ marginBottom: "10px" }}
+          />
+          <Button type="primary" onClick={createRequest}>Submit Request</Button>
+        </div>
+      </Col>
+    </Row>
     )}
   </>
   );
